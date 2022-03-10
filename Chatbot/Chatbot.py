@@ -37,32 +37,50 @@ app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///database.db"
 api = Api(app)
 
 # คลาสนี้เชื่อมต่อกับฐานข้อมูล (SQLite) ถ้าข้อมูลในนี้เปลี่ยนในตารางของฐานข้อมูลก็จะเปลี่ยน
-class RecordModel(db.Model):
+class CreateTripModel(db.Model):
+    User_ID = db.Column(db.String,primary_key=True)
+    Trip_name = db.Column(db.String(500),nullable=False)
+    def __repr__(self):
+        return f"CreateTrip(User_ID={User_ID},Trip_name={Trip_name})"
+
+class RecordModel(db.Model): # ชื่อ class คือคือชื่อตารางใน SQLite --> record_accommodation
     User_ID = db.Column(db.String,primary_key=True)
     Trip_name = db.Column(db.String(500),nullable=False)
     Hotel_name = db.Column(db.String(500),nullable=False)
-
     def __repr__(self):
         return f"Record(Trip_name={Trip_name},Hotel_name={Hotel_name})"
 
 db.create_all()
 
-# Request reqparse
+# Request reqparse Trip
+CreateTrip_add_args = reqparse.RequestParser()
+CreateTrip_add_args.add_argument("User_ID",type=str,required=True,help="กรุณาป้อนรหัสผู้ใช้เป็นตัวอักษรหรือระบุชื่อทริปด้วยครับ")
+CreateTrip_add_args.add_argument("Trip_name",type=str,required=True,help="กรุณาป้อนชื่อทริปเป็นตัวอักษรหรือระบุชื่อทริปด้วยครับ")
+
+# Request reqparse Hotel
 record_add_args = reqparse.RequestParser()
 record_add_args.add_argument("Trip_name",type=str,required=True,help="กรุณาป้อนชื่อทริปเป็นตัวอักษรหรือระบุชื่อทริปด้วยครับ") # help จะส่งการแจ้งเตือนกลับในกรณีที่เราระบุ argument ไม่ตรง type
 record_add_args.add_argument("Hotel_name",type=str,required=True,help="กรุณาป้อนชื่อโรงแรมเป็นตัวอักษรหรือระบุชื่อโรงแรมด้วยครับ")
 
+resource_field={ # Record data create_trip in to database
+    "User_ID":"fields.String",
+    "Trip_name":"String"
+}
+resource_field = { # Record data in to Database (Hetel)
+    "User_ID":fields.String,
+    "Trip_name":fields.String,
+    "Hotel_name":fields.String
+}
+
+myTrip={ 
+    "1aasdfvbsdafe":{"Trip":"WatPraKaew"}, 
+    "2b":{"Trip":"MungBolan"},
+    "3c":{"Trip":"Siam"},
+}
 record = {
     "1":{"Trip":"วัดพระแก้ว","Hotel":"โรงแรม A"}, 
     "2":{"Trip":"เกาะล้าน","Hotel":"โรงแรม B"},
     "3":{"Trip":"สวนสยาม","Hotel":"โรงแรม C"},
-}
-
-# Record data in to Database
-resource_field = {
-    "User_ID":fields.String,
-    "Trip_name":fields.String,
-    "Hotel_name":fields.String
 }
 
 # validate request
@@ -73,23 +91,59 @@ def notFoundID(User_ID):
 #     if Trip_name not in record:
 #         abort(404,message="ไม่พบชื่อทริปที่คุณร้องขอ")
 
-# Design
+### Design
+# Save create trip
+class CreateTrip(Resource):
+    @marshal_with(resource_field)
+    def get(self,User_ID):
+        return myTrip[User_ID]
+    # @marshal_with(resource_field)
+    # def get(self,Trip_name):
+    #     return myTrip[Trip_name]
+
+    @marshal_with(resource_field)
+    def post(self):
+        args = CreateTrip_add_args.parse_args()
+        print(args)
+        CreateTrip = CreateTripModel(UserID=args["User_ID"],Trip_name=args["Trip_name"])
+        db.session.add(CreateTrip)
+        db.session.commit()
+        return CreateTrip,201
+
+    # @marshal_with(resource_field)
+    # def post(self,Trip_name):
+    #     args = CreateTrip_add_args.parse_args()
+    #     return args
+    # create_trip = CreateTripModel(User_ID=User_ID,Trip_name=args["Trip_name"])
+    # db.session.add(create_trip)
+    # db.seesion.commit() # หลังจาก commit เสร็จคือบันทึกข้อมูลเรียบร้อย
+    # return create_trip,201
+
+# Save Hotel
 class Record(Resource):
     @marshal_with(resource_field)
     def get(self,User_ID): # ขอข้อมูล #####
         notFoundID(User_ID)
         return record[User_ID] # {"key","value"}
-
+    
     @marshal_with(resource_field) #####
     def post(self,User_ID): # สร้างข้อมูล
         args = record_add_args.parse_args()
+        # if User_ID==User_ID and Trip_name==Trip_name:
+        #     replace('Hotel_name',Hotel_name,Hotel_name)
+        # else:
         record = RecordModel(User_ID=User_ID,Trip_name=args["Trip_name"],Hotel_name=args["Hotel_name"]) ##### บันทึก
         db.session.add(record) #####
         db.session.commit() # เปลี่ยนแปลงข้อมูลในฐานข้อมูล #####
         return record,201 # 201 คือการเพิ่มข้อมูลลงฐานข้อมูล #####
         # return args
+    # if User_ID==User_ID and Trip_name==Trip_name: #หรือถ้า User_ID and Trip_name in database แล้วให้...
+    #     replace('Hotel_name',Hotel_name,Hotel_name)
+    # else:
+    
 
 # Call     
+api.add_resource(CreateTrip,"/trip") # อันเก่าที่ถึงจุดบันทึกข้อมูลแล้ว = api.add_resource(CreateTrip,"/trip/<string:Trip_name>")
 api.add_resource(Record,"/record/<string:User_ID>")
 
 ####################### Save data #######################
@@ -133,6 +187,11 @@ def generating_answer(question_from_dailogflow_dict):
     elif intent_group_question_str == 'save_schedule - yes':
         answer_str = save_schedule(question_from_dailogflow_dict)
         
+    elif intent_group_question_str == 'info_create_trip':
+        answer_str = info_create_trip(question_from_dailogflow_dict)
+    elif intent_group_question_str == 'save_create_trip - yes':
+        answer_str = save_create_trip(question_from_dailogflow_dict)
+
     elif intent_group_question_str == 'info_trip_hotel': 
         answer_str = info_trip_hotel(question_from_dailogflow_dict)
     elif intent_group_question_str == 'save_trip_hotel - yes': 
@@ -192,6 +251,18 @@ def save_schedule(respond_dict):
     sheet1.insert_row([userId,destination,date,time],2)
     return "บันทึกการแจ้งเตือนเรียบร้อยแล้วค่ะ"
 
+def info_create_trip(respond_dict):
+    Trip = respond_dict["queryResult"]["outputContexts"][0]["parameters"]["Trip"]
+    return f'คุณจะบันทึกชื่อทริปว่า {Trip} ใช่มั้ยค่ะ?'
+
+def save_create_trip(respond_dict):
+    userId = respond_dict["originalDetectIntentRequest"]["payload"]["data"]["source"]["userId"]
+    Trip = respond_dict["queryResult"]["outputContexts"][0]["parameters"]["Trip"]
+    URL = f"http://127.0.0.1:5000/record/{userId}"  
+    myobj = {'Trip_name':Trip} 
+    x = requests.post(URL, data = myobj)
+    # sheet2.insert_row([Trip,Hotel],2)
+    return "บันทึกเรียบร้อยแล้วค่ะ"
 
 def info_trip_hotel(respond_dict): 
     Trip = respond_dict["queryResult"]["outputContexts"][0]["parameters"]["Trip"]  
@@ -225,3 +296,4 @@ if __name__ == '__main__':
     print("Starting app on port %d" % port)
     app.run(debug=False, port=port, host='0.0.0.0', threaded=True)
 
+print("Hello")
